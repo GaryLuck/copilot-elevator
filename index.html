@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Elevator Discrete Event Simulator</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Inter, system-ui, sans-serif;
+      background: #111827;
+      color: #f8fafc;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .app {
+      width: min(1100px, 100%);
+      display: grid;
+      gap: 20px;
+      grid-template-columns: 1.2fr 0.8fr;
+    }
+
+    .panel,
+    .log-panel {
+      background: #1f2937;
+      border: 1px solid #374151;
+      border-radius: 18px;
+      box-shadow: 0 18px 60px rgba(15, 23, 42, 0.28);
+      padding: 20px;
+    }
+
+    h1,
+    h2 {
+      margin: 0 0 14px;
+    }
+
+    .sim-area {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .building {
+      position: relative;
+      width: 420px;
+      aspect-ratio: 1 / 1.2;
+      background: linear-gradient(to bottom, #0f172a 0%, #111827 100%);
+      border: 2px solid #334155;
+      border-radius: 24px;
+      overflow: hidden;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+
+    .floor {
+      position: relative;
+      height: calc((100% - 20px) / 4);
+      border-bottom: 1px solid #334155;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 0 12px;
+      box-sizing: border-box;
+    }
+
+    .floor:last-child {
+      border-bottom: 0;
+    }
+
+    .floor-label {
+      color: #94a3b8;
+      font-size: 0.9rem;
+      width: 80px;
+    }
+
+    .floor-panel {
+      width: 100%;
+      display: flex;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+
+    .button {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      border: 1px solid #475569;
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      background: #0f172a;
+      color: #cbd5e1;
+      cursor: default;
+      font-size: 0.8rem;
+      transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+    }
+
+    .button.active {
+      background: #f59e0b;
+      color: #0f172a;
+      border-color: #fbbf24;
+      transform: scale(1.05);
+    }
+
+    .shaft {
+      position: absolute;
+      inset: 16px;
+      left: auto;
+      right: 110px;
+      width: 90px;
+      background: linear-gradient(180deg, #1f2937 0%, #0f172a 100%);
+      border-radius: 14px;
+      padding: 10px 8px;
+      box-sizing: border-box;
+      display: grid;
+      grid-template-rows: repeat(4, 1fr);
+      gap: 10px;
+    }
+
+    .shaft::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 14px;
+      box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.15);
+      pointer-events: none;
+    }
+
+    .car {
+      position: absolute;
+      width: 84px;
+      height: 88px;
+      left: calc(100% - 96px);
+      background: linear-gradient(180deg, #f8fafc, #e2e8f0);
+      border: 2px solid #94a3b8;
+      border-radius: 16px;
+      box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 6px;
+      padding: 10px;
+      box-sizing: border-box;
+      transition: transform 0.5s ease;
+    }
+
+    .car-door {
+      height: 52px;
+      background: #0f172a;
+      border-radius: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .car-door::after,
+    .car-door::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      width: 50%;
+      height: 100%;
+      background: #334155;
+      transition: transform 0.35s ease;
+    }
+
+    .car-door::before {
+      left: 0;
+      transform: translateX(0);
+    }
+
+    .car-door::after {
+      right: 0;
+      transform: translateX(0);
+    }
+
+    .car.door-open .car-door::before {
+      transform: translateX(-100%);
+    }
+
+    .car.door-open .car-door::after {
+      transform: translateX(100%);
+    }
+
+    .car-info {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      font-size: 0.75rem;
+      color: #475569;
+    }
+
+    .panel-buttons {
+      display: grid;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .panel-buttons .row {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .indicator {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(40px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .indicator span {
+      font-size: 0.8rem;
+      padding: 10px;
+      border-radius: 12px;
+      background: #111827;
+      border: 1px solid #334155;
+      text-align: center;
+      color: #94a3b8;
+    }
+
+    .indicator span strong {
+      display: block;
+      color: #e2e8f0;
+      margin-bottom: 4px;
+      font-size: 0.9rem;
+    }
+
+    .log-panel {
+      max-height: 810px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .controls {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .controls button {
+      border: none;
+      border-radius: 999px;
+      padding: 10px 16px;
+      background: #2563eb;
+      color: white;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    .controls button:disabled {
+      background: #334155;
+      cursor: not-allowed;
+    }
+
+    .log {
+      flex: 1;
+      overflow: auto;
+      background: #111827;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
+    .log-entry {
+      padding: 10px;
+      border-radius: 12px;
+      background: rgba(148, 163, 184, 0.08);
+    }
+
+    .stat-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .metric {
+      background: #111827;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 12px;
+      text-align: center;
+      color: #cbd5e1;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 1.4rem;
+      color: #f8fafc;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      color: #94a3b8;
+    }
+
+    .legend-color {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      display: inline-block;
+    }
+
+    .legend-car { background: #fde68a; }
+    .legend-person { background: #38bdf8; }
+    .legend-call { background: #f97316; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <section class="panel">
+      <h1>Elevator Simulator</h1>
+      <p>Discrete event simulation of a four-story elevator with arriving passengers, floor calls, and cabin button requests.</p>
+      <div class="sim-area">
+        <div class="building" id="building">
+          <div class="shaft" id="shaft"></div>
+          <div class="car door-closed" id="car">
+            <div class="car-door"></div>
+            <div class="car-info" id="carInfo"></div>
+          </div>
+        </div>
+        <div>
+          <div class="panel-buttons">
+            <div class="indicator" id="callIndicators"></div>
+            <div class="indicator" id="carIndicators"></div>
+          </div>
+          <div class="stat-row">
+            <div class="metric"><strong id="simTime">0.0s</strong>Sim Time</div>
+            <div class="metric"><strong id="pendingCount">0</strong>Waiting</div>
+          </div>
+          <div class="legend">
+            <div class="legend-item"><span class="legend-color legend-car"></span>Elevator</div>
+            <div class="legend-item"><span class="legend-color legend-person"></span>People</div>
+            <div class="legend-item"><span class="legend-color legend-call"></span>Call Buttons</div>
+          </div>
+          <div class="controls">
+            <button id="startBtn">Start</button>
+            <button id="pauseBtn" disabled>Pause</button>
+            <button id="resetBtn">Reset</button>
+          </div>
+          <div class="metric" style="margin-top:10px"><strong id="servedCount">0</strong>Served</div>
+        </div>
+      </div>
+      <div class="stat-row" style="margin-top: 20px;">
+        <div class="metric"><strong id="elevatorState">Idle</strong>Elevator Status</div>
+        <div class="metric"><strong id="doorState">Closed</strong>Door</div>
+      </div>
+    </section>
+
+    <section class="log-panel">
+      <h2>Event Log</h2>
+      <div class="log" id="log"></div>
+    </section>
+  </div>
+
+  <script>
+    const floors = [4, 3, 2, 1];
+    const floorHeight = 100 / 4;
+    const eventQueue = [];
+    const people = [];
+    const calls = {
+      up: [false, false, false, false],
+      down: [false, false, false, false],
+      car: [false, false, false, false],
+    };
+    const state = {
+      time: 0,
+      running: false,
+      doorOpen: false,
+      currentFloor: 1,
+      direction: 0,
+      targetFloors: new Set(),
+      nextArrival: 0,
+      served: 0,
+      waitingCount: 0,
+      moving: false,
+      pendingEvents: 0,
+    };
+
+    const building = document.getElementById('building');
+    const shaft = document.getElementById('shaft');
+    const car = document.getElementById('car');
+    const carInfo = document.getElementById('carInfo');
+    const callIndicators = document.getElementById('callIndicators');
+    const carIndicators = document.getElementById('carIndicators');
+    const log = document.getElementById('log');
+    const simTime = document.getElementById('simTime');
+    const pendingCount = document.getElementById('pendingCount');
+    const elevatorState = document.getElementById('elevatorState');
+    const doorState = document.getElementById('doorState');
+    const servedCount = document.getElementById('servedCount');
+    const startBtn = document.getElementById('startBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+    function createFloorElements() {
+      shaft.innerHTML = '';
+      floorElements.length = 0;
+      floors.forEach((floor) => {
+        const row = document.createElement('div');
+        row.className = 'floor';
+        const label = document.createElement('span');
+        label.className = 'floor-label';
+        label.textContent = `Floor ${floor}`;
+        const panel = document.createElement('div');
+        panel.className = 'floor-panel';
+
+        const upBtn = document.createElement('div');
+        upBtn.className = 'button';
+        upBtn.textContent = '↑';
+        upBtn.dataset.floor = floor;
+        upBtn.dataset.type = 'up';
+        if (floor === 4) upBtn.style.visibility = 'hidden';
+
+        const downBtn = document.createElement('div');
+        downBtn.className = 'button';
+        downBtn.textContent = '↓';
+        downBtn.dataset.floor = floor;
+        downBtn.dataset.type = 'down';
+        if (floor === 1) downBtn.style.visibility = 'hidden';
+
+        panel.appendChild(upBtn);
+        panel.appendChild(downBtn);
+        row.appendChild(label);
+        row.appendChild(panel);
+        shaft.appendChild(row);
+      });
+    }
+
+    const floorElements = [];
+    const personElements = [];
+
+    function renderCallButtons() {
+      callIndicators.innerHTML = '';
+      floors.forEach((floor) => {
+        const panel = document.createElement('div');
+        panel.className = 'indicator';
+        const label = document.createElement('span');
+        label.innerHTML = `<strong>Floor ${floor}</strong>`;
+        const up = document.createElement('span');
+        up.textContent = '↑';
+        up.className = calls.up[floor - 1] ? 'button active' : 'button';
+        const down = document.createElement('span');
+        down.textContent = '↓';
+        down.className = calls.down[floor - 1] ? 'button active' : 'button';
+        panel.append(label, up, down);
+        callIndicators.appendChild(panel);
+      });
+    }
+
+    function renderCarButtons() {
+      carIndicators.innerHTML = '';
+      floors.forEach((floor) => {
+        const btn = document.createElement('div');
+        btn.className = calls.car[floor - 1] ? 'button active' : 'button';
+        btn.textContent = floor;
+        carIndicators.appendChild(btn);
+      });
+    }
+
+    function logEvent(message) {
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      entry.textContent = `[${state.time.toFixed(1)}s] ${message}`;
+      log.prepend(entry);
+      while (log.childElementCount > 120) {
+        log.removeChild(log.lastChild);
+      }
+    }
+
+    function schedule(time, callback, label = '') {
+      eventQueue.push({ time, callback, label });
+      eventQueue.sort((a, b) => a.time - b.time);
+    }
+
+    function nextEvent() {
+      return eventQueue.shift();
+    }
+
+    function now() {
+      return state.time;
+    }
+
+    function resetSimulation() {
+      eventQueue.length = 0;
+      people.length = 0;
+      personElements.forEach((element) => element.remove());
+      personElements.length = 0;
+      state.time = 0;
+      state.running = false;
+      state.doorOpen = false;
+      state.currentFloor = 1;
+      state.direction = 0;
+      state.targetFloors = new Set();
+      state.nextArrival = 1.0;
+      state.served = 0;
+      state.waitingCount = 0;
+      state.moving = false;
+      updateSummary();
+      renderCallButtons();
+      renderCarButtons();
+      setCarPosition(state.currentFloor, false);
+      setDoorState(false);
+      log.innerHTML = '';
+      logEvent('Simulation reset. Press Start to begin.');
+    }
+
+    function updateSummary() {
+      simTime.textContent = `${state.time.toFixed(1)}s`;
+      pendingCount.textContent = state.waitingCount;
+      elevatorState.textContent = state.moving ? (state.direction > 0 ? 'Moving up' : 'Moving down') : 'Idle';
+      doorState.textContent = state.doorOpen ? 'Open' : 'Closed';
+      servedCount.textContent = state.served;
+      carInfo.innerHTML = `
+        <div>Floor <strong>${state.currentFloor}</strong></div>
+        <div>${state.moving ? (state.direction > 0 ? '↑' : '↓') : '–'}</div>
+        <div>${state.targetFloors.size} targets</div>
+      `;
+    }
+
+    function scheduleNextArrival() {
+      const interval = 2.0 + Math.random() * 3.5;
+      state.nextArrival = state.time + interval;
+      schedule(state.nextArrival, createArrival, 'personArrival');
+    }
+
+    function createArrival() {
+      const origin = Math.ceil(Math.random() * 4);
+      let destination;
+      do {
+        destination = Math.ceil(Math.random() * 4);
+      } while (destination === origin);
+      const direction = destination > origin ? 'up' : 'down';
+      const person = { id: crypto.randomUUID(), origin, destination, direction, status: 'waiting' };
+      people.push(person);
+      state.waitingCount++;
+      calls[direction][origin - 1] = true;
+      logEvent(`Person arrived on floor ${origin}, wants ${direction} to floor ${destination}.`);
+      renderCallButtons();
+      renderPerson(person);
+      scheduleNextArrival();
+      planElevator();
+      updateSummary();
+    }
+
+    function renderPerson(person) {
+      const elem = document.createElement('div');
+      elem.textContent = `P${person.origin}->${person.destination}`;
+      elem.style.position = 'absolute';
+      elem.style.left = '16px';
+      elem.style.width = '72px';
+      elem.style.height = '24px';
+      elem.style.borderRadius = '12px';
+      elem.style.background = '#38bdf8';
+      elem.style.color = '#0f172a';
+      elem.style.fontSize = '0.75rem';
+      elem.style.display = 'flex';
+      elem.style.alignItems = 'center';
+      elem.style.justifyContent = 'center';
+      elem.style.padding = '0 8px';
+      elem.style.boxSizing = 'border-box';
+      elem.style.transition = 'top 0.5s ease, opacity 0.4s ease';
+      elem.dataset.personId = person.id;
+      updatePersonPosition(person, elem);
+      building.appendChild(elem);
+      personElements.push(elem);
+    }
+
+    function updatePersonPosition(person, elem) {
+      const floorIndex = floors.indexOf(person.origin);
+      const top = 20 + floorIndex * (floorHeight + 0.2) + 4;
+      elem.style.top = `${top}%`;
+    }
+
+    function removePerson(person) {
+      const index = people.findIndex((item) => item.id === person.id);
+      if (index !== -1) people.splice(index, 1);
+      const elemIndex = personElements.findIndex((el) => el.dataset.personId === person.id);
+      if (elemIndex !== -1) {
+        const elem = personElements[elemIndex];
+        elem.style.opacity = '0';
+        setTimeout(() => elem.remove(), 400);
+        personElements.splice(elemIndex, 1);
+      }
+    }
+
+    function setCarPosition(floor, animate = true) {
+      const bottom = (floor - 1) * (floorHeight + 0.2);
+      car.style.transitionDuration = animate ? '0.5s' : '0s';
+      car.style.transform = `translateY(-${bottom}%)`;
+    }
+
+    function setDoorState(open) {
+      state.doorOpen = open;
+      car.classList.toggle('door-open', open);
+      updateSummary();
+    }
+
+    function planElevator() {
+      if (state.moving || state.doorOpen) return;
+      const waitingUp = floors.some((_, idx) => calls.up[idx]);
+      const waitingDown = floors.some((_, idx) => calls.down[idx]);
+      const targetSet = new Set(state.targetFloors);
+      if (targetSet.size === 0 && !waitingUp && !waitingDown) {
+        state.direction = 0;
+        updateSummary();
+        return;
+      }
+      if (state.direction === 0) {
+        if (waitingUp || waitingDown) {
+          const nextCall = findNearestCall();
+          state.direction = nextCall > state.currentFloor ? 1 : nextCall < state.currentFloor ? -1 : calls.up[state.currentFloor - 1] ? 1 : -1;
+        }
+      }
+      if (targetSet.size === 0) {
+        const nextCall = findNearestCall();
+        if (nextCall) {
+          state.direction = nextCall > state.currentFloor ? 1 : nextCall < state.currentFloor ? -1 : calls.up[state.currentFloor - 1] ? 1 : -1;
+          scheduleMove();
+        }
+      } else {
+        scheduleMove();
+      }
+    }
+
+    function findNearestCall() {
+      const waitingFloors = [];
+      floors.forEach((floor, idx) => {
+        if (calls.up[idx] || calls.down[idx] || calls.car[idx]) waitingFloors.push(floor);
+      });
+      if (waitingFloors.length === 0) return null;
+      waitingFloors.sort((a,b) => Math.abs(a - state.currentFloor) - Math.abs(b - state.currentFloor));
+      return waitingFloors[0];
+    }
+
+    function scheduleMove() {
+      if (state.moving) return;
+      let nextFloor = state.currentFloor + state.direction;
+      if (nextFloor < 1) nextFloor = 1;
+      if (nextFloor > 4) nextFloor = 4;
+      if (nextFloor === state.currentFloor) {
+        if (state.direction > 0 && !calls.up[state.currentFloor - 1] && !state.targetFloors.has(state.currentFloor)) {
+          state.direction = -1;
+          nextFloor = state.currentFloor - 1;
+        } else if (state.direction < 0 && !calls.down[state.currentFloor - 1] && !state.targetFloors.has(state.currentFloor)) {
+          state.direction = 1;
+          nextFloor = state.currentFloor + 1;
+        }
+      }
+      if (nextFloor !== state.currentFloor) {
+        state.moving = true;
+        state.direction = nextFloor > state.currentFloor ? 1 : -1;
+        logEvent(`Elevator departs floor ${state.currentFloor} ${state.direction > 0 ? 'up' : 'down'} to floor ${nextFloor}.`);
+        updateSummary();
+        schedule(state.time + 1.5, () => arriveAtFloor(nextFloor), 'move');
+      } else {
+        arriveAtFloor(state.currentFloor);
+      }
+    }
+
+    function arriveAtFloor(floor) {
+      state.currentFloor = floor;
+      state.moving = false;
+      setCarPosition(floor, true);
+      updateSummary();
+      logEvent(`Elevator arrives at floor ${floor}.`);
+      schedule(state.time + 0.5, () => openDoors(), 'openDoors');
+    }
+
+    function openDoors() {
+      setDoorState(true);
+      const serviced = unloadPassengers();
+      const loaded = loadPassengers();
+      const action = serviced + loaded > 0 ? `Doors open, ${serviced} off, ${loaded} on.` : 'Doors open, no stop required.';
+      logEvent(action);
+      schedule(state.time + 2.2, () => closeDoors(), 'closeDoors');
+    }
+
+    function closeDoors() {
+      setDoorState(false);
+      state.direction = decideNextDirection();
+      updateSummary();
+      logEvent('Doors close.');
+      planElevator();
+    }
+
+    function decideNextDirection() {
+      const targets = Array.from(state.targetFloors).sort((a, b) => a - b);
+      if (targets.length === 0) {
+        const waitingEx = findNearestCall();
+        if (!waitingEx) return 0;
+        return waitingEx > state.currentFloor ? 1 : -1;
+      }
+      if (state.direction >= 0) return targets[0] > state.currentFloor ? 1 : -1;
+      return targets[targets.length - 1] < state.currentFloor ? -1 : 1;
+    }
+
+    function unloadPassengers() {
+      const finished = people.filter((person) => person.status === 'in-elevator' && person.destination === state.currentFloor);
+      finished.forEach((person) => {
+        person.status = 'served';
+        state.served += 1;
+        state.targetFloors.delete(person.destination);
+        calls.car[person.destination - 1] = false;
+        removePerson(person);
+      });
+      return finished.length;
+    }
+
+    function loadPassengers() {
+      let boarded = 0;
+      const waiting = people.filter((person) => person.status === 'waiting' && person.origin === state.currentFloor && person.direction === (state.direction >= 0 ? 'up' : 'down'));
+      waiting.forEach((person) => {
+        person.status = 'in-elevator';
+        calls[person.direction][person.origin - 1] = false;
+        calls.car[person.destination - 1] = true;
+        state.targetFloors.add(person.destination);
+        state.waitingCount--;
+        state.pendingEvents++;
+        boarded++;
+      });
+      if (boarded > 0) renderCallButtons();
+      renderCarButtons();
+      updateSummary();
+      return boarded;
+    }
+
+    function processEvents() {
+      if (!state.running) return;
+      const next = eventQueue[0];
+      if (!next) {
+        logEvent('Simulation complete. No more scheduled events.');
+        state.running = false;
+        startBtn.disabled = false;
+        pauseBtn.disabled = true;
+        return;
+      }
+      eventQueue.shift();
+      state.time = next.time;
+      next.callback();
+      updateSummary();
+      if (state.running) {
+        window.requestAnimationFrame(processEvents);
+      }
+    }
+
+    function startSimulation() {
+      if (state.running) return;
+      state.running = true;
+      startBtn.disabled = true;
+      pauseBtn.disabled = false;
+      if (eventQueue.length === 0) {
+        scheduleNextArrival();
+        planElevator();
+      }
+      processEvents();
+      logEvent('Simulation started.');
+    }
+
+    function pauseSimulation() {
+      state.running = false;
+      startBtn.disabled = false;
+      pauseBtn.disabled = true;
+      logEvent('Simulation paused.');
+    }
+
+    function handleManualCall(floor, direction) {
+      if (calls[direction][floor - 1]) return;
+      calls[direction][floor - 1] = true;
+      logEvent(`Manual call button pressed ${direction} on floor ${floor}.`);
+      renderCallButtons();
+      planElevator();
+    }
+
+    function addFloorButton(floor) {
+      if (calls.car[floor - 1]) return;
+      calls.car[floor - 1] = true;
+      state.targetFloors.add(floor);
+      logEvent(`Elevator button selected for floor ${floor}.`);
+      renderCarButtons();
+      planElevator();
+    }
+
+    startBtn.addEventListener('click', startSimulation);
+    pauseBtn.addEventListener('click', pauseSimulation);
+    resetBtn.addEventListener('click', resetSimulation);
+
+    building.addEventListener('click', (event) => {
+      const button = event.target.closest('.button');
+      if (!button || !button.dataset.floor) return;
+      const floor = Number(button.dataset.floor);
+      const type = button.dataset.type;
+      if (type) {
+        handleManualCall(floor, type);
+      }
+    });
+
+    const carButtonContainer = document.createElement('div');
+    carButtonContainer.className = 'panel-buttons';
+    const carriageButtons = document.createElement('div');
+    carriageButtons.className = 'indicator';
+    floors.forEach((floor) => {
+      const btn = document.createElement('div');
+      btn.className = 'button';
+      btn.textContent = floor;
+      btn.dataset.floor = floor;
+      btn.dataset.type = 'car';
+      carriageButtons.appendChild(btn);
+    });
+    carButtonContainer.appendChild(carriageButtons);
+    document.querySelector('.panel').appendChild(carButtonContainer);
+
+    carriageButtons.addEventListener('click', (event) => {
+      const target = event.target.closest('.button');
+      if (!target || target.dataset.type !== 'car') return;
+      addFloorButton(Number(target.dataset.floor));
+    });
+
+    createFloorElements();
+    renderCallButtons();
+    renderCarButtons();
+    resetSimulation();
+  </script>
+</body>
+</html>
