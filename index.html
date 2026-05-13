@@ -87,8 +87,9 @@
     }
 
     .button {
-      width: 38px;
-      height: 38px;
+      width: 34px;
+      min-width: 34px;
+      height: 34px;
       border-radius: 50%;
       border: 1px solid #475569;
       display: inline-flex;
@@ -97,7 +98,7 @@
       background: #0f172a;
       color: #cbd5e1;
       cursor: default;
-      font-size: 0.8rem;
+      font-size: 0.75rem;
       transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
     }
 
@@ -209,8 +210,8 @@
 
     .indicator {
       display: grid;
-      grid-template-columns: repeat(4, minmax(40px, 1fr));
-      gap: 10px;
+      grid-template-columns: repeat(4, minmax(30px, 1fr));
+      gap: 8px;
       margin-top: 10px;
     }
 
@@ -239,8 +240,9 @@
 
     .controls {
       display: flex;
-      gap: 12px;
+      gap: 10px;
       flex-wrap: wrap;
+      align-items: center;
       margin-bottom: 14px;
     }
 
@@ -359,6 +361,13 @@
             <button id="pauseBtn" disabled>Pause</button>
             <button id="resetBtn">Reset</button>
           </div>
+          <div class="controls" style="align-items: center; gap: 10px; width: 100%;">
+            <label for="speedRange" style="color:#cbd5e1; font-size:0.95rem; display:inline-flex; align-items:center; gap:8px; flex: 1 1 auto; min-width: 110px;">
+              Speed
+              <output id="speedValue" style="min-width:40px; text-align:right; color:#f8fafc;">0.5x</output>
+            </label>
+            <input id="speedRange" type="range" min="0.25" max="2" step="0.25" value="0.5" style="flex: 1 1 180px; min-width: 120px; max-width: 240px; width: 100%;">
+          </div>
           <div class="metric" style="margin-top:10px"><strong id="servedCount">0</strong>Served</div>
         </div>
       </div>
@@ -396,6 +405,7 @@
       waitingCount: 0,
       moving: false,
       pendingEvents: 0,
+      speed: 0.5,
     };
 
     const building = document.getElementById('building');
@@ -413,6 +423,17 @@
     const startBtn = document.getElementById('startBtn');
     const pauseBtn = document.getElementById('pauseBtn');
     const resetBtn = document.getElementById('resetBtn');
+    const speedRange = document.getElementById('speedRange');
+    const speedValue = document.getElementById('speedValue');
+    let processTimer = null;
+
+    function getRealDelay(simSeconds = 1) {
+      return Math.max(120, (600 * simSeconds) / state.speed);
+    }
+
+    function updateSpeedDisplay() {
+      speedValue.textContent = `${state.speed.toFixed(2)}x`;
+    }
 
     function createFloorElements() {
       shaft.innerHTML = '';
@@ -503,6 +524,10 @@
     }
 
     function resetSimulation() {
+      if (processTimer !== null) {
+        window.clearTimeout(processTimer);
+        processTimer = null;
+      }
       eventQueue.length = 0;
       people.length = 0;
       personElements.forEach((element) => element.remove());
@@ -540,7 +565,7 @@
     }
 
     function scheduleNextArrival() {
-      const interval = 2.0 + Math.random() * 3.5;
+      const interval = 5.0 + Math.random() * 4.0;
       state.nextArrival = state.time + interval;
       schedule(state.nextArrival, createArrival, 'personArrival');
     }
@@ -606,9 +631,10 @@
     }
 
     function setCarPosition(floor, animate = true) {
-      const bottom = (floor - 1) * (floorHeight + 0.2);
-      car.style.transitionDuration = animate ? '0.5s' : '0s';
-      car.style.transform = `translateY(-${bottom}%)`;
+      const floorIndex = floors.indexOf(floor);
+      const offset = floorIndex * (floorHeight + 0.2);
+      car.style.transitionDuration = animate ? `${0.5 / state.speed}s` : '0s';
+      car.style.transform = `translateY(${offset}%)`;
     }
 
     function setDoorState(open) {
@@ -673,7 +699,7 @@
         state.direction = nextFloor > state.currentFloor ? 1 : -1;
         logEvent(`Elevator departs floor ${state.currentFloor} ${state.direction > 0 ? 'up' : 'down'} to floor ${nextFloor}.`);
         updateSummary();
-        schedule(state.time + 1.5, () => arriveAtFloor(nextFloor), 'move');
+        schedule(state.time + 2.2, () => arriveAtFloor(nextFloor), 'move');
       } else {
         arriveAtFloor(state.currentFloor);
       }
@@ -685,7 +711,7 @@
       setCarPosition(floor, true);
       updateSummary();
       logEvent(`Elevator arrives at floor ${floor}.`);
-      schedule(state.time + 0.5, () => openDoors(), 'openDoors');
+      schedule(state.time + 0.9, () => openDoors(), 'openDoors');
     }
 
     function openDoors() {
@@ -694,7 +720,7 @@
       const loaded = loadPassengers();
       const action = serviced + loaded > 0 ? `Doors open, ${serviced} off, ${loaded} on.` : 'Doors open, no stop required.';
       logEvent(action);
-      schedule(state.time + 2.2, () => closeDoors(), 'closeDoors');
+      schedule(state.time + 3.5, () => closeDoors(), 'closeDoors');
     }
 
     function closeDoors() {
@@ -756,12 +782,13 @@
         pauseBtn.disabled = true;
         return;
       }
+      const dt = next.time - state.time;
       eventQueue.shift();
       state.time = next.time;
       next.callback();
       updateSummary();
       if (state.running) {
-        window.requestAnimationFrame(processEvents);
+        processTimer = window.setTimeout(() => processEvents(), getRealDelay(dt));
       }
     }
 
@@ -780,6 +807,10 @@
 
     function pauseSimulation() {
       state.running = false;
+      if (processTimer !== null) {
+        window.clearTimeout(processTimer);
+        processTimer = null;
+      }
       startBtn.disabled = false;
       pauseBtn.disabled = true;
       logEvent('Simulation paused.');
@@ -805,6 +836,10 @@
     startBtn.addEventListener('click', startSimulation);
     pauseBtn.addEventListener('click', pauseSimulation);
     resetBtn.addEventListener('click', resetSimulation);
+    speedRange.addEventListener('input', () => {
+      state.speed = Number(speedRange.value);
+      updateSpeedDisplay();
+    });
 
     building.addEventListener('click', (event) => {
       const button = event.target.closest('.button');
@@ -840,6 +875,7 @@
     createFloorElements();
     renderCallButtons();
     renderCarButtons();
+    updateSpeedDisplay();
     resetSimulation();
   </script>
 </body>
